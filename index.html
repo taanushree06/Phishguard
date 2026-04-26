@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PhishGuard — URL Threat Detector</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --bg:#03050a;
+  --card:#080d16;
+  --card2:#0b1220;
+  --surface:#0e1628;
+  --border:rgba(255,255,255,0.06);
+  --border2:rgba(255,255,255,0.12);
+  --text:#e8edf8;
+  --muted:#4a5568;
+  --muted2:#7a869a;
+  --cyan:#00e5ff;
+  --green:#00ff94;
+  --red:#ff2d55;
+  --amber:#ffcc00;
+  --purple:#9b6dff;
+  --font:'Syne',sans-serif;
+  --mono:'DM Mono',monospace;
+}
+
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--font);
+  min-height:100vh;
+  overflow-x:hidden;
+}
+
+/* ── animated bg orbs ── */
+.orbs{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:0}
+.orb{position:absolute;border-radius:50%;filter:blur(80px);opacity:0.18;animation:drift 20s ease-in-out infinite alternate}
+.orb1{width:600px;height:600px;background:radial-gradient(circle,#00e5ff,transparent 70%);top:-200px;left:-100px;animation-delay:0s}
+.orb2{width:500px;height:500px;background:radial-gradient(circle,#9b6dff,transparent 70%);bottom:-150px;right:-100px;animation-delay:-7s}
+.orb3{width:300px;height:300px;background:radial-gradient(circle,#ff2d55,transparent 70%);top:50%;left:50%;transform:translate(-50%,-50%);animation-delay:-14s}
+@keyframes drift{0%{transform:translate(0,0) scale(1)}100%{transform:translate(40px,30px) scale(1.1)}}
+
+.wrap{position:relative;z-index:1;max-width:700px;margin:0 auto;padding:48px 20px 80px}
+
+/* ── header ── */
+.header{text-align:center;margin-bottom:52px}
+
+.logo-mark{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:72px;height:72px;
+  border-radius:22px;
+  background:linear-gradient(145deg,rgba(0,229,255,0.15),rgba(0,229,255,0.03));
+  border:1px solid rgba(0,229,255,0.25);
+  margin-bottom:20px;
+  position:relative;
+  overflow:hidden;
+}
+.logo-mark::before{
+  content:'';
+  position:absolute;
+  inset:-1px;
+  border-radius:22px;
+  background:linear-gradient(135deg,rgba(0,229,255,0.4),transparent 50%,transparent 80%,rgba(155,109,255,0.3));
+  pointer-events:none;
+}
+.logo-mark svg{width:34px;height:34px;position:relative;z-index:1}
+
+.brand-name{font-size:40px;font-weight:800;color:#fff;letter-spacing:-1.5px;line-height:1}
+.brand-name span{
+  background:linear-gradient(90deg,var(--cyan),var(--purple));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text
+}
+
+.brand-sub{
+  font-family:var(--mono);
+  font-size:11px;
+  color:var(--muted2);
+  letter-spacing:0.2em;
+  text-transform:uppercase;
+  margin-top:8px;
+}
+
+.pill-row{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:16px;flex-wrap:wrap}
+.pill{
+  display:inline-flex;align-items:center;gap:6px;
+  background:rgba(255,255,255,0.04);
+  border:1px solid var(--border2);
+  border-radius:99px;
+  padding:5px 12px;
+  font-family:var(--mono);
+  font-size:10px;
+  color:var(--muted2);
+  letter-spacing:0.1em;
+}
+.pill-dot{width:6px;height:6px;border-radius:50%;background:var(--cyan);animation:blink 2s ease-in-out infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}
+
+/* ── sample chips ── */
+.chips{display:flex;gap:8px;margin-bottom:24px;flex-wrap:wrap}
+.chip{
+  flex:1;min-width:140px;
+  background:rgba(255,255,255,0.03);
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:12px 14px;
+  cursor:pointer;
+  transition:all 0.2s;
+  position:relative;
+  overflow:hidden;
+}
+.chip::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(0,229,255,0.06),transparent);opacity:0;transition:opacity 0.2s}
+.chip:hover{border-color:rgba(0,229,255,0.3);transform:translateY(-1px)}
+.chip:hover::before{opacity:1}
+.chip-label{font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:0.15em;text-transform:uppercase;margin-bottom:3px}
+.chip-url{font-family:var(--mono);font-size:11px;color:var(--muted2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chip-badge{
+  display:inline-flex;align-items:center;gap:4px;
+  font-family:var(--mono);font-size:9px;font-weight:500;
+  padding:2px 7px;border-radius:99px;
+  margin-top:5px;
+}
+.chip-badge.safe{background:rgba(0,255,148,0.1);color:var(--green);border:1px solid rgba(0,255,148,0.2)}
+.chip-badge.phish{background:rgba(255,45,85,0.1);color:var(--red);border:1px solid rgba(255,45,85,0.2)}
+
+/* ── main scan area ── */
+.scan-wrap{margin-bottom:20px}
+
+.input-row{
+  display:flex;
+  background:rgba(255,255,255,0.03);
+  border:1px solid var(--border2);
+  border-radius:16px;
+  overflow:hidden;
+  transition:border-color 0.2s,box-shadow 0.2s;
+  position:relative;
+}
+.input-row:focus-within{
+  border-color:rgba(0,229,255,0.5);
+  box-shadow:0 0 0 4px rgba(0,229,255,0.07),0 8px 32px rgba(0,0,0,0.3);
+}
+
+.url-icon{
+  display:flex;align-items:center;justify-content:center;
+  padding:0 16px;
+  color:var(--muted);
+  flex-shrink:0;
+}
+.url-input{
+  flex:1;
+  background:transparent;
+  border:none;
+  color:var(--text);
+  font-family:var(--mono);
+  font-size:13px;
+  padding:18px 0;
+  outline:none;
+}
+.url-input::placeholder{color:var(--muted)}
+
+.btn-scan{
+  background:linear-gradient(135deg,var(--cyan),#0099bb);
+  color:#001a22;
+  border:none;
+  border-radius:12px;
+  margin:6px;
+  padding:0 24px;
+  font-family:var(--font);
+  font-size:13px;
+  font-weight:700;
+  cursor:pointer;
+  display:flex;align-items:center;gap:8px;
+  transition:all 0.2s;
+  white-space:nowrap;
+  letter-spacing:0.02em;
+  flex-shrink:0;
+}
+.btn-scan:hover{opacity:0.9;transform:scale(1.02)}
+.btn-scan:active{transform:scale(0.97)}
+.btn-scan:disabled{opacity:0.3;cursor:not-allowed;transform:none}
+.btn-scan svg{width:14px;height:14px}
+
+/* scanning progress bar */
+.progress-bar{
+  height:2px;
+  background:linear-gradient(90deg,var(--cyan),var(--purple),var(--cyan));
+  background-size:200% 100%;
+  border-radius:0 0 16px 16px;
+  margin-top:-2px;
+  display:none;
+  animation:sweep 1.5s linear infinite;
+}
+@keyframes sweep{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+/* ── error ── */
+.err-box{
+  display:none;
+  background:rgba(255,45,85,0.08);
+  border:1px solid rgba(255,45,85,0.2);
+  border-radius:12px;
+  padding:14px 18px;
+  font-family:var(--mono);
+  font-size:12px;
+  color:var(--red);
+  margin-top:16px;
+  line-height:1.6;
+}
+
+/* ── verdict big card ── */
+.verdict-wrap{display:none;margin-bottom:20px}
+
+.verdict-main{
+  border-radius:20px;
+  padding:28px;
+  border:1px solid transparent;
+  position:relative;
+  overflow:hidden;
+}
+.verdict-main::before{
+  content:'';
+  position:absolute;
+  inset:0;
+  border-radius:20px;
+  padding:1px;
+  -webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);
+  -webkit-mask-composite:xor;
+  mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);
+  mask-composite:exclude;
+  pointer-events:none;
+}
+.verdict-main.safe  {background:rgba(0,255,148,0.04);border-color:rgba(0,255,148,0.18)}
+.verdict-main.danger{background:rgba(255,45,85,0.05); border-color:rgba(255,45,85,0.22)}
+
+/* glowing radial bg */
+.verdict-glow{
+  position:absolute;width:300px;height:300px;border-radius:50%;
+  filter:blur(80px);opacity:0.12;pointer-events:none;
+  top:-80px;right:-60px;
+}
+.safe   .verdict-glow{background:var(--green)}
+.danger .verdict-glow{background:var(--red)}
+
+.verdict-top{display:flex;align-items:center;justify-content:space-between;gap:16px;position:relative;z-index:1}
+
+.verdict-left{display:flex;flex-direction:column}
+.verdict-label{
+  font-family:var(--mono);font-size:10px;
+  letter-spacing:0.2em;text-transform:uppercase;
+  color:var(--muted2);margin-bottom:6px;
+}
+.verdict-text{font-size:42px;font-weight:800;letter-spacing:-2px;line-height:1}
+.safe   .verdict-text{color:var(--green)}
+.danger .verdict-text{color:var(--red)}
+
+.verdict-score-wrap{text-align:right}
+.score-circle{
+  width:88px;height:88px;border-radius:50%;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  border:2px solid;
+  position:relative;
+}
+.safe   .score-circle{border-color:rgba(0,255,148,0.3);background:rgba(0,255,148,0.06)}
+.danger .score-circle{border-color:rgba(255,45,85,0.3); background:rgba(255,45,85,0.06)}
+.score-num{font-family:var(--mono);font-size:24px;font-weight:500;line-height:1}
+.safe   .score-num{color:var(--green)}
+.danger .score-num{color:var(--red)}
+.score-lbl{font-family:var(--mono);font-size:9px;color:var(--muted2);letter-spacing:0.1em;text-transform:uppercase}
+
+.verdict-bar-wrap{margin-top:20px;position:relative;z-index:1}
+.verdict-bar-track{
+  height:6px;background:rgba(255,255,255,0.05);border-radius:99px;overflow:hidden;
+}
+.verdict-bar-fill{height:100%;width:0%;border-radius:99px;transition:width 1s cubic-bezier(0.22,1,0.36,1)}
+.safe   .verdict-bar-fill{background:linear-gradient(90deg,#00cc77,var(--green))}
+.danger .verdict-bar-fill{background:linear-gradient(90deg,#cc0033,var(--red))}
+.verdict-bar-labels{display:flex;justify-content:space-between;margin-top:6px}
+.verdict-bar-labels span{font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase}
+
+.verdict-desc{
+  margin-top:16px;
+  font-family:var(--mono);font-size:12px;color:var(--muted2);line-height:1.7;
+  background:rgba(0,0,0,0.2);border-radius:10px;padding:12px 14px;
+  position:relative;z-index:1;
+  border-left:2px solid;
+}
+.safe   .verdict-desc{border-color:var(--green)}
+.danger .verdict-desc{border-color:var(--red)}
+
+/* ── URL anatomy ── */
+.anatomy-card{
+  display:none;
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:16px;
+  padding:20px 22px;
+  margin-bottom:20px;
+}
+.card-title{
+  font-family:var(--mono);font-size:9px;color:var(--muted);
+  letter-spacing:0.2em;text-transform:uppercase;
+  margin-bottom:14px;
+  display:flex;align-items:center;gap:10px;
+}
+.card-title::after{content:'';flex:1;height:1px;background:var(--border)}
+
+.url-tokens{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px;align-items:center;font-family:var(--mono);font-size:12px}
+.tok{padding:4px 10px;border-radius:7px;border:1px solid}
+.tok-scheme{background:rgba(0,229,255,0.08);border-color:rgba(0,229,255,0.25);color:var(--cyan)}
+.tok-host  {background:rgba(155,109,255,0.08);border-color:rgba(155,109,255,0.25);color:var(--purple)}
+.tok-path  {background:rgba(255,204,0,0.08);border-color:rgba(255,204,0,0.2);color:var(--amber)}
+.tok-query {background:rgba(255,45,85,0.08);border-color:rgba(255,45,85,0.2);color:var(--red)}
+.tok-sep   {color:var(--muted);padding:0;background:none;border:none}
+
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.stat-box{
+  background:rgba(255,255,255,0.02);
+  border:1px solid var(--border);
+  border-radius:10px;
+  padding:12px;
+  text-align:center;
+}
+.stat-val{font-family:var(--mono);font-size:20px;font-weight:500;color:var(--text)}
+.stat-lbl{font-family:var(--mono);font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em;margin-top:2px}
+
+/* ── signal grid ── */
+.signals-card{
+  display:none;
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:16px;
+  padding:20px 22px;
+  margin-bottom:20px;
+}
+.signals-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.sig{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  background:rgba(255,255,255,0.02);
+  border:1px solid var(--border);
+  border-radius:9px;
+  padding:10px 12px;
+  transition:border-color 0.15s;
+}
+.sig:hover{border-color:var(--border2)}
+.sig-left{display:flex;align-items:center;gap:8px;min-width:0}
+.sig-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
+.sig-name{font-family:var(--mono);font-size:11px;color:var(--muted2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sig-tag{font-family:var(--mono);font-size:10px;font-weight:500;padding:2px 8px;border-radius:5px;white-space:nowrap;flex-shrink:0}
+
+.sig-dot.ok{background:var(--green)}
+.sig-dot.warn{background:var(--amber)}
+.sig-dot.risk{background:var(--red)}
+
+.sig-tag.ok  {background:rgba(0,255,148,0.08);color:var(--green);border:1px solid rgba(0,255,148,0.2)}
+.sig-tag.warn{background:rgba(255,204,0,0.08);color:var(--amber);border:1px solid rgba(255,204,0,0.2)}
+.sig-tag.risk{background:rgba(255,45,85,0.08);color:var(--red);border:1px solid rgba(255,45,85,0.2)}
+
+/* ── history ── */
+.history-card{
+  display:none;
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:16px;
+  padding:20px 22px;
+}
+.history-empty{font-family:var(--mono);font-size:12px;color:var(--muted);text-align:center;padding:16px}
+.history-list{display:flex;flex-direction:column;gap:6px}
+.hist-item{
+  display:flex;align-items:center;gap:10px;
+  background:rgba(255,255,255,0.02);
+  border:1px solid var(--border);
+  border-radius:9px;
+  padding:10px 14px;
+  cursor:pointer;
+  transition:border-color 0.15s;
+}
+.hist-item:hover{border-color:var(--border2)}
+.hist-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.hist-dot.safe{background:var(--green)}
+.hist-dot.danger{background:var(--red)}
+.hist-url{font-family:var(--mono);font-size:12px;color:var(--muted2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hist-score{font-family:var(--mono);font-size:11px;color:var(--muted);flex-shrink:0}
+.hist-badge{font-family:var(--mono);font-size:10px;font-weight:500;padding:2px 8px;border-radius:5px;flex-shrink:0}
+.hist-badge.safe  {background:rgba(0,255,148,0.08);color:var(--green);border:1px solid rgba(0,255,148,0.2)}
+.hist-badge.danger{background:rgba(255,45,85,0.08);color:var(--red);border:1px solid rgba(255,45,85,0.2)}
+
+.footer{font-family:var(--mono);font-size:10px;color:var(--muted);text-align:center;margin-top:32px;letter-spacing:0.08em}
+</style>
+</head>
+<body>
+
+<div class="orbs">
+  <div class="orb orb1"></div>
+  <div class="orb orb2"></div>
+  <div class="orb orb3"></div>
+</div>
+
+<div class="wrap">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="logo-mark">
+      <svg viewBox="0 0 34 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M17 4L28 9V17C28 22.8 23.2 28.1 17 29C10.8 28.1 6 22.8 6 17V9L17 4Z"
+              fill="rgba(0,229,255,0.12)" stroke="rgba(0,229,255,0.9)" stroke-width="1.5"/>
+        <path d="M12.5 17L15.5 20L21.5 14" stroke="#00e5ff" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <div class="brand-name">Phish<span>Guard</span></div>
+    <div class="brand-sub">AI-Powered URL Threat Analysis</div>
+    <div class="pill-row">
+      <div class="pill"><span class="pill-dot"></span>XGBoost ML Model</div>
+      <div class="pill">Flask Backend</div>
+      <div class="pill">Real-time Scanning</div>
+    </div>
+  </div>
+
+  <!-- Sample chips -->
+  <div class="chips">
+    <div class="chip" onclick="loadSample('https://www.google.com')">
+      <div class="chip-label">Try Safe URL</div>
+      <div class="chip-url">https://www.google.com</div>
+      <div class="chip-badge safe">✓ Likely Safe</div>
+    </div>
+    <div class="chip" onclick="loadSample('http://paypa1-secure-login.tk/update?user=me')">
+      <div class="chip-label">Try Phishing URL</div>
+      <div class="chip-url">paypa1-secure-login.tk/update</div>
+      <div class="chip-badge phish">⚠ Phishing</div>
+    </div>
+  </div>
+
+  <!-- Scan input -->
+  <div class="scan-wrap">
+    <div class="input-row">
+      <div class="url-icon">
+        <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
+          <path d="M10 3C7.24 3 5 5.24 5 8s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5z" stroke="currentColor" stroke-width="1.5"/>
+          <path d="M10 8v-.01M10 10v2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <input class="url-input" id="urlInput" type="text"
+             placeholder="Paste any URL to scan — https://..."
+             autocomplete="off" spellcheck="false"/>
+      <button class="btn-scan" id="scanBtn" onclick="analyzeURL()">
+        <svg viewBox="0 0 20 20" fill="none">
+          <circle cx="9" cy="9" r="5" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M13 13L16.5 16.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        Analyze
+      </button>
+    </div>
+    <div class="progress-bar" id="progressBar"></div>
+    <div class="err-box" id="errBox"></div>
+  </div>
+
+  <!-- Verdict -->
+  <div class="verdict-wrap" id="verdictWrap">
+    <div class="verdict-main" id="verdictCard">
+      <div class="verdict-glow"></div>
+      <div class="verdict-top">
+        <div class="verdict-left">
+          <div class="verdict-label">Verdict</div>
+          <div class="verdict-text" id="verdictText">SAFE</div>
+        </div>
+        <div class="verdict-score-wrap">
+          <div class="score-circle">
+            <div class="score-num" id="scoreNum">0%</div>
+            <div class="score-lbl">risk</div>
+          </div>
+        </div>
+      </div>
+      <div class="verdict-bar-wrap">
+        <div class="verdict-bar-track">
+          <div class="verdict-bar-fill" id="verdictBarFill"></div>
+        </div>
+        <div class="verdict-bar-labels">
+          <span>Safe</span>
+          <span>Phishing</span>
+        </div>
+      </div>
+      <div class="verdict-desc" id="verdictDesc"></div>
+    </div>
+  </div>
+
+  <!-- URL Anatomy -->
+  <div class="anatomy-card" id="anatomyCard">
+    <div class="card-title">URL anatomy</div>
+    <div class="url-tokens" id="urlTokens"></div>
+    <div class="stats-row" id="statsRow"></div>
+  </div>
+
+  <!-- Signal Analysis -->
+  <div class="signals-card" id="signalsCard">
+    <div class="card-title">Signal analysis</div>
+    <div class="signals-grid" id="signalsGrid"></div>
+  </div>
+
+  <!-- Scan History -->
+  <div class="history-card" id="historyCard">
+    <div class="card-title">Recent scans</div>
+    <div class="history-empty" id="historyEmpty">No scans yet — run your first scan above</div>
+    <div class="history-list" id="historyList"></div>
+  </div>
+
+  <div class="footer">Backend: Flask + XGBoost · localhost:5000 · PhishGuard v2</div>
+</div>
+
+<script>
+const API = "http://127.0.0.1:5000/predict";
+let scanHistory = [];
+
+function loadSample(url) {
+  document.getElementById('urlInput').value = url;
+  analyzeURL();
+}
+
+function parseURL(raw) {
+  try {
+    const url = new URL(raw.startsWith('http') ? raw : 'http://' + raw);
+    return {
+      scheme: url.protocol.replace(':',''),
+      host:   url.hostname,
+      port:   url.port,
+      path:   url.pathname,
+      query:  url.search,
+      hash:   url.hash,
+      parts:  url.hostname.split('.'),
+      ok:     true
+    };
+  } catch {
+    return {ok:false,host:raw,parts:[raw],scheme:'',path:'',query:'',hash:''};
+  }
+}
+
+function signals(raw) {
+  const url = raw.startsWith('http') ? raw : 'http://' + raw;
+  const p   = parseURL(url);
+  const low = url.toLowerCase();
+  return [
+    {name:'HTTPS Protocol',     level: p.scheme==='https'?'ok':'risk',  note: p.scheme==='https'?'Encrypted':'No encryption'},
+    {name:'IP as hostname',     level: /^\d{1,3}(\.\d{1,3}){3}$/.test(p.host)?'risk':'ok', note:/^\d{1,3}(\.\d{1,3}){3}$/.test(p.host)?'Raw IP found':'Domain used'},
+    {name:'Typosquatting',      level: /g00gle|paypa1|amaz0n|faceb00k|microso1t|app1e/.test(low)?'risk':'ok', note:/g00gle|paypa1|amaz0n/.test(low)?'Brand spoof!':'No impersonation'},
+    {name:'Suspicious TLD',     level: /\.(tk|ml|ga|cf|xyz|top|club|gq)(\?|\/|$)/.test(low)?'risk':'ok', note:/\.(tk|ml|ga|cf|xyz|top|club|gq)/.test(low)?'High-abuse TLD':'TLD normal'},
+    {name:'URL length',         level: url.length>100?'risk':url.length>75?'warn':'ok', note:url.length+' chars'},
+    {name:'Subdomain depth',    level: (p.parts.length-2)>2?'risk':(p.parts.length-2)>1?'warn':'ok', note:Math.max(p.parts.length-2,0)+' level(s)'},
+    {name:'@ in URL',           level: url.includes('@')?'risk':'ok', note:url.includes('@')?'Browser redirect trick':'Clean'},
+    {name:'Sensitive keywords', level: /login|verify|password|update|secure|confirm|bank|account/.test(low)?'warn':'ok', note:/login|verify|password/.test(low)?'Keywords found':'Path clean'},
+    {name:'Non-standard port',  level: p.port&&p.port!=='443'&&p.port!=='80'?'warn':'ok', note:p.port?'Port '+p.port:'Standard port'},
+    {name:'Double dash in host',level: p.host.includes('--')?'warn':'ok', note:p.host.includes('--')?'Double dash found':'Host clean'}
+  ];
+}
+
+function level(score) {
+  return score >= 65 ? 'danger' : 'safe';
+}
+
+async function analyzeURL() {
+  const raw = document.getElementById('urlInput').value.trim();
+  if (!raw) return;
+
+  const btn        = document.getElementById('scanBtn');
+  const progress   = document.getElementById('progressBar');
+  const errBox     = document.getElementById('errBox');
+  const verdictWrap= document.getElementById('verdictWrap');
+  const anatomyCard= document.getElementById('anatomyCard');
+  const signalsCard= document.getElementById('signalsCard');
+  const historyCard= document.getElementById('historyCard');
+
+  btn.disabled             = true;
+  progress.style.display   = 'block';
+  errBox.style.display     = 'none';
+  verdictWrap.style.display = 'none';
+  anatomyCard.style.display = 'none';
+  signalsCard.style.display = 'none';
+
+  let score = 0, verdict = 'SAFE';
+
+  try {
+    const res = await fetch(API, {
+      method : 'POST',
+      headers: {'Content-Type':'application/json'},
+      body   : JSON.stringify({url: raw})
+    });
+    if (!res.ok) throw new Error('Server returned ' + res.status);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    score   = data.risk_score ?? 0;
+    verdict = data.verdict ?? (score >= 65 ? 'PHISHING' : 'SAFE');
+  } catch(err) {
+    errBox.textContent   = '⚠  Cannot reach ML backend — is app.py running?  (' + err.message + ')';
+    errBox.style.display = 'block';
+    progress.style.display = 'none';
+    btn.disabled = false;
+    return;
+  }
+
+  const lvl = level(score);
+  const colorMap = {safe:'var(--green)', danger:'var(--red)'};
+  const descs = {
+    safe  : 'No significant phishing signals were detected. This URL appears legitimate. Still, always be cautious when entering credentials.',
+    danger: 'High probability of phishing detected. Do NOT enter any credentials or personal data. Close this page immediately.'
+  };
+
+  // Render verdict
+  const card = document.getElementById('verdictCard');
+  card.className = 'verdict-main ' + lvl;
+  verdictWrap.style.display = 'block';
+  document.getElementById('verdictText').textContent = verdict;
+  document.getElementById('scoreNum').textContent    = score + '%';
+  document.getElementById('verdictDesc').textContent = descs[lvl];
+  setTimeout(() => {
+    document.getElementById('verdictBarFill').style.width = score + '%';
+  }, 80);
+
+  // URL anatomy
+  const p = parseURL(raw.startsWith('http') ? raw : 'http://' + raw);
+  let tokens = '';
+  const addTok = (cls, txt) => `<span class="tok ${cls}">${txt}</span>`;
+  tokens += addTok('tok-scheme', p.scheme + '://');
+  tokens += addTok('tok-host', p.host);
+  if (p.port) tokens += addTok('tok-query', ':' + p.port);
+  if (p.path && p.path !== '/') tokens += addTok('tok-path', p.path);
+  if (p.query) tokens += addTok('tok-query', p.query);
+  document.getElementById('urlTokens').innerHTML = tokens;
+
+  const fullURL = raw.startsWith('http') ? raw : 'http://' + raw;
+  document.getElementById('statsRow').innerHTML = [
+    {val: fullURL.length, lbl:'Chars'},
+    {val: Math.max(p.parts.length-2, 0), lbl:'Subdomains'},
+    {val: p.path.split('/').filter(Boolean).length, lbl:'Path depth'},
+    {val: p.query ? p.query.replace('?','').split('&').length : 0, lbl:'Params'}
+  ].map(s=>`<div class="stat-box"><div class="stat-val">${s.val}</div><div class="stat-lbl">${s.lbl}</div></div>`).join('');
+  anatomyCard.style.display = 'block';
+
+  // Signals
+  document.getElementById('signalsGrid').innerHTML = signals(raw).map(s=>`
+    <div class="sig">
+      <div class="sig-left">
+        <div class="sig-dot ${s.level}"></div>
+        <span class="sig-name">${s.name}</span>
+      </div>
+      <span class="sig-tag ${s.level}">${s.note}</span>
+    </div>
+  `).join('');
+  signalsCard.style.display = 'block';
+
+  // History
+  scanHistory.unshift({url: raw, score, verdict, lvl, time: new Date().toLocaleTimeString()});
+  if (scanHistory.length > 8) scanHistory.pop();
+  renderHistory();
+  historyCard.style.display = 'block';
+
+  progress.style.display = 'none';
+  btn.disabled = false;
+}
+
+function renderHistory() {
+  const empty = document.getElementById('historyEmpty');
+  const list  = document.getElementById('historyList');
+  if (!scanHistory.length) { empty.style.display='block'; list.innerHTML=''; return; }
+  empty.style.display = 'none';
+  list.innerHTML = scanHistory.map((h,i) => `
+    <div class="hist-item" onclick="reloadHistory(${i})">
+      <div class="hist-dot ${h.lvl}"></div>
+      <div class="hist-url">${h.url}</div>
+      <div class="hist-score">${h.score}%</div>
+      <div class="hist-badge ${h.lvl}">${h.verdict}</div>
+    </div>
+  `).join('');
+}
+
+function reloadHistory(i) {
+  document.getElementById('urlInput').value = scanHistory[i].url;
+  analyzeURL();
+}
+
+document.getElementById('urlInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') analyzeURL();
+});
+</script>
+</body>
+</html>
