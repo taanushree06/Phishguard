@@ -14,7 +14,7 @@ from feature_extraction import (
     SENSITIVE_WORDS,
 )
 
-app = Flask(__name__, template_folder="templates")
+app = Flask(__name__)
 CORS(app)
 
 
@@ -70,8 +70,7 @@ def rule_boost(url: str, score: int) -> int:
 # ─────────────────────────────────────────────
 @app.route("/")
 def home():
-    return render_template("index.html")
-
+     return "Phishing Detector Backend is Running ✅"
 
 @app.route("/predict", methods=["POST"])
 def predict():
