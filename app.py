@@ -70,7 +70,7 @@ def rule_boost(url: str, score: int) -> int:
 # ─────────────────────────────────────────────
 @app.route("/")
 def home():
-     return "Phishing Detector Backend is Running ✅"
+     return "Backend is live✅"
 
 @app.route("/predict", methods=["POST"])
 def predict():
